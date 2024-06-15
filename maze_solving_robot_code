@@ -1,0 +1,218 @@
+/*
+ * Maze Solving Robot Project Code
+ * 
+ * Description:
+ * This code is for a Maze Solving Robot using an Arduino Uno microcontroller. The robot uses three infrared (IR) sensors 
+ * and a color sensor to navigate through a maze. The robot starts at a green line, follows black lines to navigate the maze, 
+ * and stops at a red line indicating the end of the maze. The robot is equipped with DC motors controlled by a motor driver circuit.
+ *
+ * Parts Used:
+ * - Arduino Uno (microcontroller)
+ * - IR Sensors (KY-033): for line detection
+ * - Color Sensor (TCS3200): for detecting the start (green) and end (red) of the maze
+ * - DC Motors: for driving the wheels
+ * - Motor Driver Circuit: for controlling the speed and direction of the motors
+ * 
+ * Function of the Code:
+ * - Initializes the sensors and motors
+ * - Starts the robot when the green line is detected
+ * - Follows the black lines using the center IR sensor
+ * - Turns left when the left IR sensor detects black
+ * - Turns right when the right IR sensor detects black and the left IR sensor detects white
+ * - Performs backtracking when a dead-end is detected (all three IR sensors detect white)
+ * - Stops the robot when the red line is detected
+ */
+
+
+// Motor connections
+const int mot1 = 9;  // (right front / back)
+const int mot2 = 6;  // (right front / back)
+const int mot3 = 5;  // (left front / back)
+const int mot4 = 3;  // (left front / back)
+
+// IR sensor connections
+const int leftIR = 13;  // Left IR sensor pin
+const int rightIR = 11; // Right IR sensor pin
+const int centerIR = 12; // Center IR sensor pin
+
+int Left = 0;
+int Right = 0;
+int Center = 0;
+
+int red = 0;
+int green = 0;
+int blue = 0;
+
+const int motorSpeed = 55;
+
+// Color sensor connections
+const int S0 = 2;
+const int S1 = 3;
+const int S2 = 8;
+const int S3 = 7;
+const int colorOut = 10;
+
+void LEFT(void);
+void RIGHT(void);
+void STRAIGHT(void);
+void STOP(void);
+void BACK(void);
+void TURNBACK(void);
+void readSensors(void);
+bool isGreen(int r, int g, int b);
+bool isRed(int r, int g, int b);
+void readColorSensor(int &r, int &g, int &b);
+
+void setup() {
+  pinMode(mot1, OUTPUT);
+  pinMode(mot2, OUTPUT);
+  pinMode(mot3, OUTPUT);
+  pinMode(mot4, OUTPUT);
+
+  pinMode(leftIR, INPUT);
+  pinMode(rightIR, INPUT);
+  pinMode(centerIR, INPUT);
+
+  pinMode(S0, OUTPUT);
+  pinMode(S1, OUTPUT);
+  pinMode(S2, OUTPUT);
+  pinMode(S3, OUTPUT);
+  pinMode(colorOut, INPUT);
+
+  digitalWrite(S0, HIGH);
+  digitalWrite(S1, LOW);
+
+  digitalWrite(leftIR, LOW);
+  digitalWrite(rightIR, LOW);
+  digitalWrite(centerIR, LOW);
+
+  Serial.begin(9600);
+}
+
+void loop() {
+  while (true) {
+    // Start loop to detect green color
+    while (true) {
+      readColorSensor(red, green, blue);
+      readSensors();
+
+      Left = digitalRead(leftIR);
+      Center = digitalRead(centerIR);
+      Right = digitalRead(rightIR);
+
+      if (isGreen(red, green, blue)) {
+        // Start the robot when green color is detected
+        STRAIGHT();
+        delay(1000);
+        STOP();
+        break;
+      }
+    }
+
+    // Main loop to follow the line and detect red color
+    while (true) {
+      readColorSensor(red, green, blue);
+      readSensors();
+
+      Left = digitalRead(leftIR);
+      Center = digitalRead(centerIR);
+      Right = digitalRead(rightIR);
+
+      // Check for red color first to stop immediately
+      if (isRed(red, green, blue)) {
+        STOP();
+        while (true); // Halt the program
+      }
+
+      if ((Left == LOW && Center == HIGH && Right == LOW) || (Left == LOW && Center == HIGH && Right == HIGH)) {
+        STRAIGHT(); // Forward motion rule
+      } else if (Left == HIGH) {
+        LEFT(); // Left turn rule
+      } else if ((Left == LOW && Center == LOW && Right == HIGH)) {
+        RIGHT(); // Right turn rule
+      } else if (Left == LOW && Center == LOW && Right == LOW) {
+        TURNBACK();
+      } else {
+        STOP(); // Stop if no condition is met
+      }
+    }
+  }
+}
+
+void RIGHT(void) {
+  // Turn right
+  analogWrite(mot1, 0); // Right wheel stops
+  analogWrite(mot2, 0); // Right wheel stops
+  analogWrite(mot3, 180); // Left wheel moves at full speed
+  analogWrite(mot4, 0); // Left wheel stops
+}
+
+void LEFT(void) {
+  // Turn left
+  analogWrite(mot1, 180); // Right wheel moves at full speed
+  analogWrite(mot2, 0); // Right wheel stops
+  analogWrite(mot3, 0); // Left wheel stops
+  analogWrite(mot4, 0); // Left wheel stops
+}
+
+void STRAIGHT(void) {
+  analogWrite(mot1, motorSpeed); // Right wheel moves at full speed
+  analogWrite(mot3, motorSpeed); // Left wheel moves at full speed
+}
+
+void BACK(void) {
+  analogWrite(mot3, 195); // Left wheel moves at full speed
+  analogWrite(mot2, 180); // Right wheel moves at full speed
+}
+
+void STOP(void) {
+  analogWrite(mot1, 0);
+  analogWrite(mot2, 0);
+  analogWrite(mot3, 0);
+  analogWrite(mot4, 0);
+}
+
+void TURNBACK(void) {
+  BACK();
+  delay(200);
+  STOP();
+}
+
+void readSensors(void) {
+  Left = digitalRead(leftIR);
+  Center = digitalRead(centerIR);
+  Right = digitalRead(rightIR);
+}
+
+bool isGreen(int red, int green, int blue) {
+  if (green < red && green < blue) {
+    if (!(red <= 10 && green <= 10 && blue <= 10))
+      return true;
+  }
+  return false;
+}
+
+bool isRed(int red, int green, int blue) {
+  if (red < blue && red < green && 60 < red < 90) {
+    if (!(red <= 10 && green <= 10 && blue <= 10))
+      return true;
+  }
+  return false;
+}
+
+void readColorSensor(int &r, int &g, int &b) {
+  // Set S2 and S3 to read red frequency
+  digitalWrite(S2, LOW);
+  digitalWrite(S3, LOW);
+  r = pulseIn(colorOut, digitalRead(colorOut) == HIGH ? LOW : HIGH);
+
+  // Set S2 and S3 to read green frequency
+  digitalWrite(S2, HIGH);
+  digitalWrite(S3, HIGH);
+  g = pulseIn(colorOut, digitalRead(colorOut) == HIGH ? LOW : HIGH);
+
+  // Set S2 and S3 to read blue frequency
+  digitalWrite(S2, LOW);
+  digitalWrite(S3, HIGH);
+  b = pulseIn(colorOut, digitalRead(colorOut) == HIGH ? LOW : HIGH);
+}
